@@ -405,6 +405,7 @@ function wait_readnb(x::LibuvStream, nb::Int)
     oldthrottle = x.throttle
     preserve_handle(x)
     lock(x.cond)
+    iolocked = true
     try
         while bytesavailable(x.buffer) < nb
             x.readerror === nothing || throw(x.readerror)
@@ -413,12 +414,24 @@ function wait_readnb(x::LibuvStream, nb::Int)
             x.throttle = max(nb, x.throttle)
             start_reading(x) # ensure we are reading
             iolock_end()
+            iolocked = false
             wait(x.cond)
+            unlock(x.cond)
+            iolock_begin()
+            iolocked = true
+            lock(x.cond)
+        end
+    finally
+        if !iolocked
+            # `wait` threw: it re-took x.cond, but not the iolock. Everywhere
+            # else the iolock comes first (a libuv read callback holds it and
+            # then locks x.cond), so taking it in stop_reading while holding
+            # x.cond can deadlock against such a callback. Drop x.cond and
+            # take both in that order.
             unlock(x.cond)
             iolock_begin()
             lock(x.cond)
         end
-    finally
         if isempty(x.cond)
             stop_reading(x) # stop reading iff there are currently no other read clients of the stream
         end
@@ -1004,6 +1017,7 @@ function readuntil(x::LibuvStream, c::UInt8; keep::Bool=false)
         if isopen(x) && x.status != StatusEOF
             preserve_handle(x)
             lock(x.cond)
+            iolocked = true
             try
                 while !occursin(c, x.buffer)
                     x.readerror === nothing || throw(x.readerror)
@@ -1011,12 +1025,24 @@ function readuntil(x::LibuvStream, c::UInt8; keep::Bool=false)
                     x.status != StatusEOF || break
                     start_reading(x) # ensure we are reading
                     iolock_end()
+                    iolocked = false
                     wait(x.cond)
+                    unlock(x.cond)
+                    iolock_begin()
+                    iolocked = true
+                    lock(x.cond)
+                end
+            finally
+                if !iolocked
+                    # `wait` threw: it re-took x.cond, but not the iolock. Everywhere
+                    # else the iolock comes first (a libuv read callback holds it and
+                    # then locks x.cond), so taking it in stop_reading while holding
+                    # x.cond can deadlock against such a callback. Drop x.cond and
+                    # take both in that order.
                     unlock(x.cond)
                     iolock_begin()
                     lock(x.cond)
                 end
-            finally
                 if isempty(x.cond)
                     stop_reading(x) # stop reading iff there are currently no other read clients of the stream
                 end
