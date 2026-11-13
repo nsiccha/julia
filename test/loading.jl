@@ -1405,3 +1405,51 @@ end
         copy!(LOAD_PATH, old_load_path)
     end
 end
+
+@testset "compile lock and cache file keyed by the source file (#51850)" begin
+    old_load_path = copy(LOAD_PATH)
+    old_depot_path = copy(DEPOT_PATH)
+    mktempdir() do dir
+        try
+            uuid = uuid4()
+            srcs = String[]
+            for tree in ("treeA", "treeB")
+                pkgdir = joinpath(dir, tree, "SourceKeyed")
+                mkpath(joinpath(pkgdir, "src"))
+                write(joinpath(pkgdir, "Project.toml"), "name = \"SourceKeyed\"\nuuid = \"$uuid\"\n")
+                src = joinpath(pkgdir, "src", "SourceKeyed.jl")
+                write(src, "module SourceKeyed end\n")
+                push!(srcs, src)
+            end
+            link = joinpath(dir, "linkA")
+            symlink(joinpath(dir, "treeA"), link)
+            pkg = PkgId(uuid, "SourceKeyed")
+            empty!(DEPOT_PATH)
+            push!(DEPOT_PATH, joinpath(dir, "depot"))
+            lockA = Base.compilecache_pidfile_path(pkg, srcs[1])
+            lockB = Base.compilecache_pidfile_path(pkg, srcs[2])
+            # two checkouts of one package compile under two locks, side by side
+            @test lockA != lockB
+            @test dirname(lockA) == dirname(lockB)
+            @test endswith(lockA, ".ji.pidfile")
+            # one source file has one lock, however its path is spelled
+            @test Base.compilecache_pidfile_path(pkg, joinpath(link, "SourceKeyed", "src", "SourceKeyed.jl")) == lockA
+            # without a source path: the source the load path resolves
+            empty!(LOAD_PATH)
+            push!(LOAD_PATH, joinpath(dir, "treeB"))
+            @test Base.compilecache_pidfile_path(pkg) == lockB
+            # one project compiling two source files writes two cache files
+            project = joinpath(dir, "Project.toml")
+            cacheA = Base.compilecache_path(pkg, UInt64(0); project, srcpath=Base.compilecache_source_key(srcs[1]))
+            cacheB = Base.compilecache_path(pkg, UInt64(0); project, srcpath=Base.compilecache_source_key(srcs[2]))
+            @test cacheA != cacheB
+            @test dirname(cacheA) == dirname(cacheB)
+            # no source path: the name is unchanged
+            @test Base.compilecache_path(pkg, UInt64(0); project, srcpath="") == Base.compilecache_path(pkg, UInt64(0); project)
+            @test Base.compilecache_source_key(nothing) == ""
+        finally
+            copy!(LOAD_PATH, old_load_path)
+            copy!(DEPOT_PATH, old_depot_path)
+        end
+    end
+end

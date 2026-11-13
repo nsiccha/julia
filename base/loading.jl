@@ -2370,7 +2370,19 @@ function compilecache_dir(pkg::PkgId)
     return joinpath(DEPOT_PATH[1], entrypath)
 end
 
-function compilecache_path(pkg::PkgId, prefs_hash::UInt64; project::String=something(Base.active_project(), ""))::String
+# The source file a package is compiled from, as the compile lock and the cache file name key
+# it: its real path, so that two spellings of one file (a symlinked checkout) share one key.
+# `nothing` (no source found) keys nothing.
+function compilecache_source_key(srcpath::Union{Nothing,String})
+    srcpath === nothing && return ""
+    return try
+        realpath(srcpath)
+    catch
+        srcpath
+    end
+end
+
+function compilecache_path(pkg::PkgId, prefs_hash::UInt64; project::String=something(Base.active_project(), ""), srcpath::String="")::String
     entrypath, entryfile = cache_file_entry(pkg)
     cachepath = joinpath(DEPOT_PATH[1], entrypath)
     isdir(cachepath) || mkpath(cachepath)
@@ -2389,6 +2401,10 @@ function compilecache_path(pkg::PkgId, prefs_hash::UInt64; project::String=somet
         crc = _crc32c(cpu_target, crc)
 
         crc = _crc32c(prefs_hash, crc)
+        # A cache only validates against the source file it was compiled from (`stale_cachefile`),
+        # so compiles of one package from different source files never write the same file.
+        # An empty `srcpath` leaves the name as it was.
+        crc = _crc32c(srcpath, crc)
         project_precompile_slug = slug(crc, 5)
         abspath(cachepath, string(entryfile, "_", project_precompile_slug, ".ji"))
     end
@@ -2461,7 +2477,7 @@ function compilecache(pkg::PkgId, path::String, internal_stderr::IO = stderr, in
             # Read preferences hash back from .ji file (we can't precompute because
             # we don't actually know what the list of compile-time preferences are without compiling)
             prefs_hash = preferences_hash(tmppath)
-            cachefile = compilecache_path(pkg, prefs_hash)
+            cachefile = compilecache_path(pkg, prefs_hash; srcpath=compilecache_source_key(path))
             ocachefile = cache_objects ? ocachefile_from_cachefile(cachefile) : nothing
 
             # append checksum for so to the end of the .ji file:
@@ -3044,7 +3060,13 @@ global parse_pidfile_hook
 # The preferences hash is only known after precompilation so just assume no preferences.
 # Also ignore the active project, which means that if all other conditions are equal,
 # the same package cannot be precompiled from different projects and/or different preferences at the same time.
-compilecache_pidfile_path(pkg::PkgId) = compilecache_path(pkg, UInt64(0); project="") * ".pidfile"
+# Do key the lock on the package's source file, though: a cache only validates against the source
+# file it was compiled from (`stale_cachefile`), so a process compiling the same package from another
+# source file (another checkout of it) could never reuse the result and need not wait for it
+# (JuliaLang/julia#51850). Compiles from one source file still share one lock, and so one result.
+compilecache_pidfile_path(pkg::PkgId) = compilecache_pidfile_path(pkg, locate_package(pkg))
+compilecache_pidfile_path(pkg::PkgId, srcpath::Union{Nothing,String}) =
+    compilecache_path(pkg, UInt64(0); project="", srcpath=compilecache_source_key(srcpath)) * ".pidfile"
 
 const compilecache_pidlock_stale_age = 10
 
@@ -3058,7 +3080,7 @@ const compilecache_pidlock_stale_age = 10
 # seconds since processes cannot be checked remotely
 function maybe_cachefile_lock(f, pkg::PkgId, srcpath::String; stale_age=compilecache_pidlock_stale_age)
     if @isdefined(mkpidlock_hook) && @isdefined(trymkpidlock_hook) && @isdefined(parse_pidfile_hook)
-        pidfile = compilecache_pidfile_path(pkg)
+        pidfile = compilecache_pidfile_path(pkg, srcpath)
         cachefile = invokelatest(trymkpidlock_hook, f, pidfile; stale_age)
         if cachefile === false
             pid, hostname, age = invokelatest(parse_pidfile_hook, pidfile)
