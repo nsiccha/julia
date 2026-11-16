@@ -1115,6 +1115,8 @@ function _include_from_serialized(pkg::PkgId, path::String, ocachepath::Union{No
         t_comp_before = cumulative_compile_time_ns()
     end
 
+    lockfile = cachefile_needs_lock(pkg, path) ? lock_cachefile_shared(path) : nothing
+    lockfile === false && return ErrorException("Cache file $(repr(path)) is being removed.")
     if ocachepath !== nothing
         @debug "Loading object cache file $ocachepath for $pkg"
         sv = ccall(:jl_restore_package_image_from_file, Any, (Cstring, Any, Cint, Cstring), ocachepath, depmods, false, pkg.name)
@@ -1123,8 +1125,10 @@ function _include_from_serialized(pkg::PkgId, path::String, ocachepath::Union{No
         sv = ccall(:jl_restore_incremental, Any, (Cstring, Any, Cint, Cstring), path, depmods, false, pkg.name)
     end
     if isa(sv, Exception)
+        lockfile isa Filesystem.File && release_cachefile_lock(lockfile)
         return sv
     end
+    keep_cachefile_lock(path, lockfile)
 
     restored = register_restored_modules(sv, pkg, path)
 
@@ -1573,7 +1577,12 @@ end
 function _tryrequire_from_serialized(pkg::PkgId, path::String, ocachepath::Union{Nothing, String})
     assert_havelock(require_lock)
     local depmodnames
-    io = open(path, "r")
+    io = try
+        open(path, "r")
+    catch e
+        e isa SystemError || rethrow()
+        return e
+    end
     try
         iszero(isvalid_cache_header(io)) && return ArgumentError("Invalid header in cache file $path.")
         _, _, depmodnames, _, _, _, clone_targets, _ = parse_cache_header(io)
@@ -2072,6 +2081,7 @@ function _require(pkg::PkgId, env=nothing)
                 else
                     cachefile, ocachefile = cachefile::Tuple{String, Union{Nothing, String}}
                     m = _tryrequire_from_serialized(pkg, cachefile, ocachefile)
+                    !isa(m, Module) && !isfile(cachefile) && @goto load_from_cache
                     if !isa(m, Module)
                         @warn "The call to compilecache failed to create a usable precompiled cache file for $pkg" exception=m
                     else
@@ -2476,9 +2486,8 @@ function compilecache(pkg::PkgId, path::String, internal_stderr::IO = stderr, in
 
             # Read preferences hash back from .ji file (we can't precompute because
             # we don't actually know what the list of compile-time preferences are without compiling)
-            prefs_hash = preferences_hash(tmppath)
-            cachefile = compilecache_path(pkg, prefs_hash; srcpath=compilecache_source_key(path))
-            ocachefile = cache_objects ? ocachefile_from_cachefile(cachefile) : nothing
+            modules, _, required_modules, _, _, prefs_hash = parse_cache_header(tmppath)
+            slot_cachefile = compilecache_path(pkg, prefs_hash; srcpath=compilecache_source_key(path))
 
             # append checksum for so to the end of the .ji file:
             crc_so = UInt32(0)
@@ -2500,54 +2509,24 @@ function compilecache(pkg::PkgId, path::String, internal_stderr::IO = stderr, in
             # inherit permission from the source file (and make them writable)
             chmod(tmppath, filemode(path) & 0o777 | 0o200)
 
-            # prune the directory with cache files
+            cachefile = slot_cachefile
+            session_only = false
             if pkg.uuid !== nothing
-                entrypath, entryfile = cache_file_entry(pkg)
-                cachefiles = filter!(x -> startswith(x, entryfile * "_") && endswith(x, ".ji"), readdir(cachepath))
-                if length(cachefiles) >= MAX_NUM_PRECOMPILE_FILES[]
-                    idx = findmin(mtime.(joinpath.(cachepath, cachefiles)))[2]
-                    evicted_cachefile = joinpath(cachepath, cachefiles[idx])
-                    @debug "Evicting file from cache" evicted_cachefile
-                    rm(evicted_cachefile; force=true)
-                    try
-                        rm(ocachefile_from_cachefile(evicted_cachefile); force=true)
-                        @static if Sys.isapple()
-                            rm(ocachefile_from_cachefile(evicted_cachefile) * ".dSYM"; force=true, recursive=true)
-                        end
-                    catch e
-                        e isa IOError || rethrow()
-                    end
-                end
+                cachefile = cachefile_with_build_id(slot_cachefile, last(first(modules)))
+                session_only = built_against_other_sources(required_modules)
+                session_only && keep_session_build_lock(pkg, slot_cachefile, cachefile, lock_cachefile_shared(tmppath))
             end
+            ocachefile = cache_objects ? ocachefile_from_cachefile(cachefile) : nothing
 
             if cache_objects
-                try
-                    rename(tmppath_so, ocachefile::String; force=true)
-                catch e
-                    e isa IOError || rethrow()
-                    isfile(ocachefile::String) || rethrow()
-                    # Windows prevents renaming a file that is in use so if there is a Julia session started
-                    # with a package image loaded, we cannot rename that file.
-                    # The code belows append a `_i` to the name of the cache file where `i` is the smallest number such that
-                    # that cache file does not exist.
-                    ocachename, ocacheext = splitext(ocachefile::String)
-                    old_cachefiles = Set(readdir(cachepath))
-                    num = 1
-                    while true
-                        ocachefile = ocachename * "_$num" * ocacheext
-                        in(basename(ocachefile), old_cachefiles) || break
-                        num += 1
-                    end
-                    # TODO: Risk for a race here if some other process grabs this name before us
-                    cachefile = cachefile_from_ocachefile(ocachefile)
-                    rename(tmppath_so, ocachefile::String; force=true)
-                end
+                rename(tmppath_so, ocachefile::String; force=true)
                 @static if Sys.isapple()
                     run(`$(Linking.dsymutil()) $ocachefile`, Base.DevNull(), Base.DevNull(), Base.DevNull())
                 end
             end
             # this is atomic according to POSIX (not Win32):
             rename(tmppath, cachefile; force=true)
+            pkg.uuid === nothing || prune_cachefiles(pkg, slot_cachefile, cachefile; session_only)
             return cachefile, ocachefile
         end
     finally
@@ -3234,30 +3213,7 @@ end
                     return true
                 end
             end
-            for chi in includes
-                f, ftime_req = chi.filename, chi.mtime
-                if !ispath(f)
-                    _f = fixup_stdlib_path(f)
-                    if isfile(_f) && startswith(_f, Sys.STDLIB)
-                        # mtime is changed by extraction
-                        @debug "Skipping mtime check for file $f used by $cachefile, since it is a stdlib"
-                        continue
-                    end
-                    @debug "Rejecting stale cache file $cachefile because file $f does not exist"
-                    return true
-                end
-                ftime = mtime(f)
-                is_stale = ( ftime != ftime_req ) &&
-                           ( ftime != floor(ftime_req) ) &&           # Issue #13606, PR #13613: compensate for Docker images rounding mtimes
-                           ( ftime != ceil(ftime_req) ) &&            # PR: #47433 Compensate for CirceCI's truncating of timestamps in its caching
-                           ( ftime != trunc(ftime_req, digits=6) ) && # Issue #20837, PR #20840: compensate for GlusterFS truncating mtimes to microseconds
-                           ( ftime != 1.0 )  &&                       # PR #43090: provide compatibility with Nix mtime.
-                           !( 0 < (ftime_req - ftime) < 1e-6 )        # PR #45552: Compensate for Windows tar giving mtimes that may be incorrect by up to one microsecond
-                if is_stale
-                    @debug "Rejecting stale cache file $cachefile (mtime $ftime_req) because file $f (mtime $ftime) has changed"
-                    return true
-                end
-            end
+            any_includes_stale(includes, cachefile) && return true
         end
 
         if !isvalid_file_crc(io)

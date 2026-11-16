@@ -461,6 +461,7 @@ include("pkgid.jl")
 include("toml_parser.jl")
 include("linking.jl")
 include("loading.jl")
+include("loading_cache.jl")
 
 # misc useful functions & macros
 include("timing.jl")
@@ -595,6 +596,9 @@ function __init__()
     init_load_path()
     init_active_project()
     append!(empty!(_sysimage_modules), keys(loaded_modules))
+    empty!(loaded_cachefile_locks)
+    empty!(session_build_locks)
+    atexit(release_cachefile_locks)
     if haskey(ENV, "JULIA_MAX_NUM_PRECOMPILE_FILES")
         MAX_NUM_PRECOMPILE_FILES[] = parse(Int, ENV["JULIA_MAX_NUM_PRECOMPILE_FILES"])
     end
