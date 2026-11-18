@@ -1,0 +1,328 @@
+{
+  "schema": 1,
+  "line": {
+    "repo": "nsiccha/julia",
+    "ref": "dogfood",
+    "sha": "2d331aaa865a1179f3db6cba31cadfd204fb9ca3"
+  },
+  "upstream": {
+    "repo": "JuliaLang/julia",
+    "ref": "release-1.10",
+    "sha": "8abe4fff9d331a121742dfd9d9e02d979a124aae"
+  },
+  "prepared_at": "2026-11-18T12:43:26Z",
+  "problems": [
+    {
+      "id": "union-split-dispatch",
+      "role": "fix",
+      "title": "Inlining can call the wrong method for an abstract type argument",
+      "summary": "On Julia 1.10, union-splitting a call with a Type{<:T} argument can select a method that does not accept the value. Julia 1.11 fixed this in the compiler. This commit backports the fix and its regression test to 1.10.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/52644",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/53720",
+          "relation": "fixes"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/52092",
+          "relation": "related"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "ce70a206132c3ce83d778ce180f5adc36842b44a",
+            "title": "Backport #52092 and #53720 to v1.10.12: fix the union-split inlining miscompile #52644",
+            "original": [
+              "ce70a206132c3ce83d778ce180f5adc36842b44a"
+            ]
+          }
+        ],
+        "why_together": "The upstream guard relies on removing the earlier unmatched-parameter shortcut. One commit carries both changes to compute_inlining_cases and the regression test."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Union-split method dispatch regression for Julia #52644"
+          ],
+          "result": "passed",
+          "detail": "The matching 1.10.12 binary selected the expected method in the dispatch probe."
+        }
+      ]
+    },
+    {
+      "id": "tridiagonal-eigenvalue",
+      "role": "fix",
+      "title": "A one-index request can return the other eigenvalue of a 2×2 tridiagonal matrix",
+      "summary": "For a symmetric tridiagonal matrix with negative trace, eigmin, eigmax and a one-index range can select the wrong eigenvalue. LAPACK 3.12 fixed xSTEMR. This branch adopts the corrected OpenBLAS binary for Julia 1.10.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/Reference-LAPACK/lapack/issues/826",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaLang/LinearAlgebra.jl/issues/983",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/Reference-LAPACK/lapack/pull/867",
+          "relation": "fixes"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "b2ee2bf0a6d09420fe612eee06803c88d335fca5",
+            "title": "Use the OpenBLAS_jll 0.3.34+1 binary artifact: its LAPACK 3.12 fixes xSTEMR for 2x2 index ranges (Reference-LAPACK/lapack#826)",
+            "original": [
+              "b2ee2bf0a6d09420fe612eee06803c88d335fca5"
+            ]
+          }
+        ],
+        "why_together": "The OpenBLAS_jll version and artifact checksums must agree for the build to download and verify the binary."
+      },
+      "depends_on": [],
+      "requires": [
+        {
+          "name": "Prebuilt OpenBLAS",
+          "build": "OpenBLAS_jll 0.3.34+1",
+          "why": "This commit updates the BinaryBuilder artifact used by the Julia build. Compiling OpenBLAS from source still uses the separate source pin."
+        }
+      ],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Two-by-two SymTridiagonal eigenvalue selection"
+          ],
+          "result": "passed",
+          "detail": "The LAPACK #826 probe returned the correct eigenvalues."
+        }
+      ]
+    },
+    {
+      "id": "exit-hook-locks",
+      "role": "fix",
+      "title": "Julia can hang in a waiting exit hook after SIGTERM",
+      "summary": "During shutdown, a hook that waits for I/O or a timer can stall on a runtime lock left held by the interrupted task. Julia 1.11 releases those locks before running the hooks. This is the 1.10 backport.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/64911",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/51849",
+          "relation": "fixes"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "09cc1b536c19ff1f3b7fac2840fd8b002e600123",
+            "title": "Backport d8a410c8eb (#51849) to v1.10.12: release the locks of the task an abrupt exit interrupts, so SIGTERM exit hooks that wait cannot deadlock on libuv's lock",
+            "original": [
+              "09cc1b536c19ff1f3b7fac2840fd8b002e600123"
+            ]
+          }
+        ],
+        "why_together": "The signal-handling change from upstream commit d8a410c8eb releases the interrupted task’s locks as its stack is discarded."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Waiting exit hook on SIGTERM"
+          ],
+          "result": "passed",
+          "detail": "The exit hook completed and the child process exited within the probe’s deadline."
+        }
+      ]
+    },
+    {
+      "id": "stream-read-lock-order",
+      "role": "fix",
+      "title": "A cancelled stream read can deadlock Julia",
+      "summary": "Cleanup after an interrupted pipe, socket or TTY read can acquire the stream condition and libuv locks in the opposite order from a read callback. The fork uses a consistent order in both read paths. Julia tracks the problem in #64934.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/64934",
+          "relation": "reports"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "dd3f20e5c90b139d670780acbf23e3fa8d6af7b7",
+            "title": "Fix the lock order of wait_readnb and readuntil after an interrupted wait: take the iolock before the stream condition, as libuv read callbacks do, so the teardown cannot deadlock against one",
+            "original": [
+              "dd3f20e5c90b139d670780acbf23e3fa8d6af7b7"
+            ]
+          }
+        ],
+        "why_together": "Both wait_readnb and readuntil stop the active read during cleanup and need the same lock order."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Stream lock ordering after an interrupted read"
+          ],
+          "result": "passed",
+          "detail": "The lock-order check observed cleanup acquire the locks in the expected order."
+        }
+      ]
+    },
+    {
+      "id": "compile-lock-source-path",
+      "role": "fix",
+      "title": "Different checkouts of one package wait on the same precompile lock",
+      "summary": "Two Julia processes with a shared depot can queue behind one lock even when their source paths differ and the second process must compile again. The fork keys both the lock and the cache slot on the source path. Upstream tracks this in #51850.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/51850",
+          "relation": "reports"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "dc01d1a19aeb3fdaec323d592f7619a6a42e3087",
+            "title": "Key the package compile lock and cache file name on the source file, so two checkouts of one package compile at the same time and never write one cache file (JuliaLang/julia#51850)",
+            "original": [
+              "dc01d1a19aeb3fdaec323d592f7619a6a42e3087"
+            ]
+          }
+        ],
+        "why_together": "Separating only the locks would let the two compilers write the same cache file. The lock and output names change together."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Concurrent precompilation with separate and shared package sources"
+          ],
+          "result": "passed",
+          "detail": "Separate checkouts overlapped by 3.05 s. Two environments sharing one source compiled it once. Separate sources in one environment retained distinct cache files."
+        }
+      ]
+    },
+    {
+      "id": "loaded-cache-lifetime",
+      "role": "fix",
+      "title": "Rebuilding a package can remove a cache image a running Julia session still needs",
+      "summary": "When a package is rebuilt, a running session may lose the dependency image needed to compile another package. Julia master fixed this with per-build cache files and advisory locks. This commit backports that design to 1.10.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/63539",
+          "relation": "fixes"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/63613",
+          "relation": "related"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "6822c3c57c79ae31dd8947a9e7bb7008f424af55",
+            "title": "Backport JuliaLang/julia#63539 and #63613: name cache files by build and retain images used by running sessions",
+            "original": [
+              "6822c3c57c79ae31dd8947a9e7bb7008f424af55"
+            ]
+          }
+        ],
+        "why_together": "Build-specific names prevent replacement. Loaded-image locks and pruning determine which generations may be removed. This backport preserves the source-keyed slots introduced by the preceding fix."
+      },
+      "depends_on": [
+        "compile-lock-source-path"
+      ],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Cache generation retention, eviction and retry"
+          ],
+          "result": "passed",
+          "detail": "All 10 checks passed, covering concurrent builds, edited dependencies, a disappeared image and retention on filesystems without locking."
+        }
+      ]
+    },
+    {
+      "id": "deep-stack-unwind-cache",
+      "role": "fix",
+      "title": "Repeated deep stack walks evict their own unwind information",
+      "summary": "On Linux and FreeBSD, Julia 1.10 uses a libunwind cache of 128 entries. Deep stack walks can evict entries needed on the next throw or sample. The fork requests 4096 entries at startup. Julia tracks this in #65052.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/65052",
+          "relation": "reports"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "2d331aaa865a1179f3db6cba31cadfd204fb9ca3",
+            "title": "Enlarge libunwind's register-state cache to 4096 entries at start, so a stack walk from a deep stack hits the cache instead of looking every frame up again under the cache's lock",
+            "original": [
+              "2d331aaa865a1179f3db6cba31cadfd204fb9ca3"
+            ]
+          }
+        ],
+        "why_together": "Runtime initialization creates the libunwind cache and then sets its size before other threads begin using it."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "julia-1.10.12-kb7",
+          "tests": [
+            "Deep-throw timing with the shipped cache and the 128-entry setting"
+          ],
+          "result": "passed",
+          "detail": "On x86-64 Linux with 428 stack entries, a deep throw took 79.7 µs as shipped and 577.4 µs after restoring 128 entries in the same process (7.2×)."
+        }
+      ]
+    }
+  ]
+}
