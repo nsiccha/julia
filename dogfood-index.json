@@ -3,25 +3,29 @@
   "line": {
     "repo": "nsiccha/julia",
     "ref": "dogfood",
-    "sha": "2d331aaa865a1179f3db6cba31cadfd204fb9ca3"
+    "sha": "f33d7363cc0332ba845b640406dc52241f8251fd"
   },
   "upstream": {
     "repo": "JuliaLang/julia",
     "ref": "release-1.10",
     "sha": "8abe4fff9d331a121742dfd9d9e02d979a124aae"
   },
-  "prepared_at": "2026-11-18T12:43:26Z",
+  "prepared_at": "2026-11-18T14:23:43Z",
   "problems": [
     {
       "id": "union-split-dispatch",
       "role": "fix",
       "title": "Inlining can call the wrong method for an abstract type argument",
-      "summary": "On Julia 1.10, union-splitting a call with a Type{<:T} argument can select a method that does not accept the value. Julia 1.11 fixed this in the compiler. This commit backports the fix and its regression test to 1.10.",
+      "summary": "On Julia 1.10, union-splitting a call with a Type{<:T} argument can select a method that does not accept the value. Julia 1.11 fixed this in the compiler. This commit backports the fix and its regression test to 1.10. Julia PR #64529 proposes the same backport for 1.10.",
       "repairs": [],
       "upstream_refs": [
         {
           "url": "https://github.com/JuliaLang/julia/issues/52644",
           "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/64529",
+          "relation": "related"
         },
         {
           "url": "https://github.com/JuliaLang/julia/pull/53720",
