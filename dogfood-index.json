@@ -10,7 +10,7 @@
     "ref": "release-1.10",
     "sha": "8abe4fff9d331a121742dfd9d9e02d979a124aae"
   },
-  "prepared_at": "2026-11-18T14:23:43Z",
+  "prepared_at": "2026-11-18T15:12:10Z",
   "problems": [
     {
       "id": "union-split-dispatch",
@@ -61,6 +61,16 @@
           ],
           "result": "passed",
           "detail": "The matching 1.10.12 binary selected the expected method in the dispatch probe."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Union-split method dispatch regression for Julia #52644"
+          ],
+          "result": "passed",
+          "detail": "The rebuilt compiler selected the expected methods in the dispatch probe."
         }
       ]
     },
@@ -115,6 +125,16 @@
           ],
           "result": "passed",
           "detail": "The LAPACK #826 probe returned the correct eigenvalues."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Two-by-two SymTridiagonal eigenvalue selection"
+          ],
+          "result": "passed",
+          "detail": "With the prebuilt OpenBLAS artifact, the 2×2 tridiagonal eigenvalue probe returned the expected result."
         }
       ]
     },
@@ -159,6 +179,16 @@
           ],
           "result": "passed",
           "detail": "The exit hook completed and the child process exited within the probe’s deadline."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Waiting exit hook on SIGTERM"
+          ],
+          "result": "passed",
+          "detail": "The waiting exit hook completed after SIGTERM within the probe’s deadline."
         }
       ]
     },
@@ -199,6 +229,16 @@
           ],
           "result": "passed",
           "detail": "The lock-order check observed cleanup acquire the locks in the expected order."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Stream lock ordering after an interrupted read"
+          ],
+          "result": "passed",
+          "detail": "The interrupted read acquired the libuv and stream locks in the expected order."
         }
       ]
     },
@@ -239,6 +279,16 @@
           ],
           "result": "passed",
           "detail": "Separate checkouts overlapped by 3.05 s. Two environments sharing one source compiled it once. Separate sources in one environment retained distinct cache files."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Concurrent precompilation with separate and shared package sources"
+          ],
+          "result": "passed",
+          "detail": "All three checks passed. Two checkouts compiled with 3.01 s of overlap, one shared source compiled once, and separate sources kept separate cache files."
         }
       ]
     },
@@ -285,6 +335,16 @@
           ],
           "result": "passed",
           "detail": "All 10 checks passed, covering concurrent builds, edited dependencies, a disappeared image and retention on filesystems without locking."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Cache generation retention, eviction and retry"
+          ],
+          "result": "passed",
+          "detail": "All 10 checks passed, covering concurrent builds, edited dependencies, a missing image and retention without filesystem locking."
         }
       ]
     },
@@ -325,6 +385,16 @@
           ],
           "result": "passed",
           "detail": "On x86-64 Linux with 428 stack entries, a deep throw took 79.7 µs as shipped and 577.4 µs after restoring 128 entries in the same process (7.2×)."
+        },
+        {
+          "base": "8abe4fff9d331a121742dfd9d9e02d979a124aae",
+          "julia": "1.10.14-DEV.8",
+          "native_build": "Linux x86-64, f33d7363cc03",
+          "tests": [
+            "Deep-throw timing with the shipped cache and the 128-entry setting"
+          ],
+          "result": "passed",
+          "detail": "On x86-64 Linux, a throw with 428 stack entries took 107.8 µs with the shipped cache and 676.0 µs after restoring the 128-entry setting in the same process."
         }
       ]
     }
