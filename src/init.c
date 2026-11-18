@@ -761,6 +761,27 @@ JL_DLLEXPORT void julia_init(JL_IMAGE_SEARCH rel)
     // author could access TSAN, per https://github.com/libunwind/libunwind/pull/109
     // so we need to do this once early (before threads)
     rec_backtrace(NULL, 0, 0);
+#if (defined(_OS_LINUX_) || defined(_OS_FREEBSD_)) && !defined(JL_DISABLE_LIBUNWIND) && \
+    (!defined(SYSTEM_LIBUNWIND) || UNW_VERSION_MAJOR > 1 || \
+     (UNW_VERSION_MAJOR == 1 && UNW_VERSION_MINOR >= 5))
+    // nongnu libunwind keeps what it learned about each return address in one
+    // cache for the whole process, of 128 entries by default, replaced in turn.
+    // A walk from a stack deeper than about 120 frames evicts its own entries
+    // as it goes, so every walk from such a stack (a thrown exception,
+    // `backtrace()`, a profiler sample) looks each frame up again in the unwind
+    // tables while holding the cache's lock: 15 to 100 times the cost of a walk
+    // that hits the cache, and one walk at a time for the whole process. 4096
+    // entries keep stacks of that depth cached for a few MiB. Resizing flushes
+    // the cache without taking its lock, so it must happen here, before any
+    // other thread can walk a stack.
+    //
+    // No walk has created the cache yet at this point, and libunwind's
+    // `dwarf_flush_rs_cache` gives a cache it has not created yet the default
+    // size whatever was asked (`!cache->hash`). So the first call only creates
+    // the cache, at 128 entries, and the second one resizes it.
+    (void)unw_set_cache_size(unw_local_addr_space, 4096, 0);
+    (void)unw_set_cache_size(unw_local_addr_space, 4096, 0);
+#endif
 #endif
 
     libsupport_init();
