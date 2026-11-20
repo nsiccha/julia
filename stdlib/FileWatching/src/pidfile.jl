@@ -13,7 +13,7 @@ using Base.Filesystem:
     File, open, JL_O_CREAT, JL_O_RDWR, JL_O_RDONLY, JL_O_EXCL,
     rename, samefile, path_separator
 
-using ..FileWatching: watch_file
+using ..FileWatching: FileMonitor
 using Base.Sys: iswindows
 
 """
@@ -255,17 +255,31 @@ function open_exclusive(path::String;
     # fall-back: wait for the lock
 
     while true
-        # start the file-watcher prior to checking for the pidfile existence
-        t = @async try
-            watch_file(path, poll_interval)
-        catch ex
-            isa(ex, IOError) || rethrow(ex)
-            sleep(poll_interval) # if the watch failed, convert to just doing a sleep
+        # watch the path in this task, as `watch_file(path, poll_interval)` does, and close
+        # the watcher and its timer before returning or retrying: a watcher left running in
+        # a background task kept the process (a precompile worker) alive for up to
+        # `poll_interval` after it got the lock (backport of the pidfile half of b6e013646639)
+        watch = FileMonitor(path)
+        timeout = nothing
+        try
+            # now try again to create it
+            file = tryopen_exclusive(path, mode)
+            file === nothing || return file
+            timeout = Timer(poll_interval) do t
+                close(watch)
+            end
+            try
+                Base.wait(watch) # sleep until the path changes or `timeout` closes `watch`
+            catch ex
+                isa(ex, IOError) || rethrow(ex)
+                # if the file was deleted in the meantime, retry at once;
+                # if the watch failed otherwise, convert to just doing a sleep
+                ex.code == Base.UV_ENOENT || sleep(poll_interval)
+            end
+        finally
+            timeout === nothing || close(timeout)
+            close(watch)
         end
-        # now try again to create it
-        file = tryopen_exclusive(path, mode)
-        file === nothing || return file
-        Base.wait(t) # sleep for a bit before trying again
         if stale_age > 0 && stale_pidfile(path, stale_age, refresh)
             # if the file seems stale, try to remove it before attempting again
             # set stale_age to zero so we won't attempt again, even if the attempt fails
