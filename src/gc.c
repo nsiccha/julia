@@ -679,14 +679,14 @@ static int64_t last_gc_total_bytes = 0;
 #ifdef _P64
 typedef uint64_t memsize_t;
 static const size_t default_collect_interval = 5600 * 1024 * sizeof(void*);
-static const size_t max_collect_interval = 1250000000UL;
+static size_t max_collect_interval = 1250000000UL;
 static size_t total_mem;
 // We expose this to the user/ci as jl_gc_set_max_memory
 static memsize_t max_total_memory = (memsize_t) 2 * 1024 * 1024 * 1024 * 1024 * 1024;
 #else
 typedef uint32_t memsize_t;
 static const size_t default_collect_interval = 3200 * 1024 * sizeof(void*);
-static const size_t max_collect_interval =  500000000UL;
+static size_t max_collect_interval =  500000000UL;
 // Work really hard to stay within 2GB
 // Alternative is to risk running out of address space
 // on 32 bit architectures.
@@ -3336,6 +3336,12 @@ static int _jl_gc_collect(jl_ptls_t ptls, jl_gc_collection_t collection)
             int64_t half = live_bytes/2;
             if (default_collect_interval < half && half <= max_collect_interval)
                 gc_num.interval = half;
+            // A live heap above twice max_collect_interval used to fall through
+            // to the default here: a thread could allocate 1.25 GB between
+            // collections with 2.3 GiB live and 45.9 MB with 2.4 GiB live, and
+            // that many promoted bytes then sufficed for a full collection.
+            else if (half > (int64_t)max_collect_interval)
+                gc_num.interval = max_collect_interval;
             else
                 gc_num.interval = default_collect_interval;
         }
@@ -3654,6 +3660,29 @@ void jl_gc_init(void)
 #endif
     if (jl_options.heap_size_hint)
         jl_gc_set_max_memory(jl_options.heap_size_hint - 250*1024*1024);
+
+    // KB fleet build: JULIA_KB_GC_MAX_INTERVAL_MB sets max_collect_interval for
+    // this process, in units of 2^20 bytes: the most one thread may allocate
+    // between two collections. The heap grows by about that much per
+    // allocating thread between collections, so a process on a host with
+    // little free memory lowers it. Never below default_collect_interval.
+    const char *max_interval_mb = getenv("JULIA_KB_GC_MAX_INTERVAL_MB");
+    if (max_interval_mb != NULL && max_interval_mb[0] != '\0') {
+        char *end = NULL;
+        errno = 0;
+        unsigned long long mb = strtoull(max_interval_mb, &end, 10);
+        if (errno != 0 || end == max_interval_mb || *end != '\0' || mb == 0 ||
+            mb > (SIZE_MAX >> 21)) {
+            jl_safe_printf("WARNING: ignoring JULIA_KB_GC_MAX_INTERVAL_MB=%s: "
+                           "expected a positive whole number of megabytes\n",
+                           max_interval_mb);
+        }
+        else {
+            max_collect_interval = (size_t)mb << 20;
+            if (max_collect_interval < default_collect_interval)
+                max_collect_interval = default_collect_interval;
+        }
+    }
 }
 
 JL_DLLEXPORT void jl_gc_set_max_memory(uint64_t max_mem)
