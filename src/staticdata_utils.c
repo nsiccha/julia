@@ -530,6 +530,15 @@ static void jl_collect_edges(jl_array_t *edges, jl_array_t *ext_targets, jl_arra
             // (invokeTypes, nullptr) => missing invoke (unused--inferred as Any)
             void *key = invokeTypes ? (void*)invokeTypes : (void*)callee;
             void *target = ptrhash_get(&edges_map2, key);
+            if (target != HT_NOTFOUND && invokeTypes) {
+                // An invoke target is the pair (invokeTypes, callee): callers that share one
+                // signature object can still select different specializations, and the restore
+                // installs the stored callee for every caller using this entry. Reuse the entry
+                // only when it names this callee too; otherwise record a new one below.
+                size_t idx = (char*)target - (char*)HT_NOTFOUND - 1;
+                if (jl_array_ptr_ref(ext_targets, idx * 3 + 1) != callee)
+                    target = HT_NOTFOUND;
+            }
             if (target == HT_NOTFOUND) {
                 size_t min_valid = 0;
                 size_t max_valid = ~(size_t)0;

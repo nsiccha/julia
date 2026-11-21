@@ -914,6 +914,48 @@ public:
     }
 };
 
+#if JL_LLVM_VERSION < 160000
+// LLVM 15's JITLink ends `.eh_frame` with a zero length word on ELF/x86-64
+// (EHFrameNullTerminator) but not on ELF/aarch64; LLVM 16 adds it there too
+// (https://reviews.llvm.org/D146067). libgcc's __register_frame reads the
+// table up to that word, since GCC 12.3 already while registering it
+// (classify_object_over_fdes). So on aarch64 Linux a table that ends at the
+// end of its segment is read on into the next page, the module's code, and
+// the process segfaults (or registers garbage records). Add the terminator
+// EHFrameNullTerminator adds, whose class LLVM 15 keeps in a private header:
+// a live 4-byte zero block at the highest address, so it is laid out last.
+class JLEHFrameNullTerminatorPlugin : public ObjectLinkingLayer::Plugin {
+public:
+    void modifyPassConfig(orc::MaterializationResponsibility &,
+                          jitlink::LinkGraph &G,
+                          jitlink::PassConfiguration &Config) override {
+        const Triple &TT = G.getTargetTriple();
+        if (!TT.isOSBinFormatELF() || TT.getArch() != Triple::aarch64)
+            return;
+        // Runs after the target's own passes, as on ELF/x86-64: after the
+        // records are split and their edges fixed.
+        Config.PrePrunePasses.push_back([](jitlink::LinkGraph &G) -> Error {
+            static const char NullTerminator[4] = {0, 0, 0, 0};
+            auto *EHFrame = G.findSectionByName(".eh_frame");
+            if (!EHFrame)
+                return Error::success();
+            auto &Terminator = G.createContentBlock(*EHFrame, ArrayRef<char>(NullTerminator, 4),
+                                                    orc::ExecutorAddr(~uint64_t(4)), 1, 0);
+            G.addAnonymousSymbol(Terminator, 0, 4, false, true);
+            return Error::success();
+        });
+    }
+    Error notifyFailed(orc::MaterializationResponsibility &MR) override {
+        return Error::success();
+    }
+    Error notifyRemovingResources(orc::ResourceKey K) override {
+        return Error::success();
+    }
+    void notifyTransferringResources(orc::ResourceKey DstKey,
+                                     orc::ResourceKey SrcKey) override {}
+};
+#endif
+
 // replace with [[maybe_unused]] when we get to C++17
 #ifdef _COMPILER_GCC_
 #pragma GCC diagnostic push
@@ -1449,6 +1491,9 @@ JuliaOJIT::JuliaOJIT()
 
     ObjectLayer.addPlugin(std::make_unique<JLDebuginfoPlugin>());
     ObjectLayer.addPlugin(std::make_unique<JLMemoryUsagePlugin>(total_size));
+#if JL_LLVM_VERSION < 160000
+    ObjectLayer.addPlugin(std::make_unique<JLEHFrameNullTerminatorPlugin>());
+#endif
 #else
     ObjectLayer.setNotifyLoaded(
         [this](orc::MaterializationResponsibility &MR,

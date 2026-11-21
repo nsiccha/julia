@@ -657,7 +657,8 @@ function uv_alloc_buf(handle::Ptr{Cvoid}, size::Csize_t, buf::Ptr{Cvoid})
         end
         # avoid aliasing of `nread` with `errno` in uv_readcb
         # or exceeding the Win32 maximum uv_buf_t len
-        maxsize = @static Sys.iswindows() ? typemax(Cint) : typemax(Cssize_t)
+        # or macOS's read(2), which fails with EINVAL above INT_MAX bytes
+        maxsize = @static (Sys.iswindows() || Sys.isapple()) ? typemax(Cint) : typemax(Cssize_t)
         newsize > maxsize && (newsize = maxsize)
     end
 
