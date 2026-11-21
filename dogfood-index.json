@@ -3,14 +3,14 @@
   "line": {
     "repo": "nsiccha/julia",
     "ref": "dogfood",
-    "sha": "f33d7363cc0332ba845b640406dc52241f8251fd"
+    "sha": "8d70bf575f988bac90ee39214a5722bbdbe63469"
   },
   "upstream": {
     "repo": "JuliaLang/julia",
     "ref": "release-1.10",
-    "sha": "8abe4fff9d331a121742dfd9d9e02d979a124aae"
+    "sha": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381"
   },
-  "prepared_at": "2026-11-18T15:12:10Z",
+  "prepared_at": "2026-11-21T12:00:28Z",
   "problems": [
     {
       "id": "union-split-dispatch",
@@ -71,6 +71,16 @@
           ],
           "result": "passed",
           "detail": "The rebuilt compiler selected the expected methods in the dispatch probe."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Julia #52644 probe and compiler inlining tests"
+          ],
+          "result": "passed",
+          "detail": "The dispatch regression selected the expected method."
         }
       ]
     },
@@ -135,6 +145,16 @@
           ],
           "result": "passed",
           "detail": "With the prebuilt OpenBLAS artifact, the 2×2 tridiagonal eigenvalue probe returned the expected result."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "LAPACK #826 single-index tridiagonal eigensolver check"
+          ],
+          "result": "passed",
+          "detail": "The negative-trace 2×2 case returned the expected smallest eigenvalue."
         }
       ]
     },
@@ -189,6 +209,16 @@
           ],
           "result": "passed",
           "detail": "The waiting exit hook completed after SIGTERM within the probe’s deadline."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Julia #51849 shutdown probe and atexit tests"
+          ],
+          "result": "passed",
+          "detail": "The waiting exit hook completed during signal-driven shutdown."
         }
       ]
     },
@@ -239,6 +269,16 @@
           ],
           "result": "passed",
           "detail": "The interrupted read acquired the libuv and stream locks in the expected order."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Interrupted stream-read probe and read/spawn suites"
+          ],
+          "result": "passed",
+          "detail": "The interrupted reader completed cleanup, and the read and process tests passed."
         }
       ]
     },
@@ -289,6 +329,16 @@
           ],
           "result": "passed",
           "detail": "All three checks passed. Two checkouts compiled with 3.01 s of overlap, one shared source compiled once, and separate sources kept separate cache files."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Concurrent package precompilation in separate checkouts"
+          ],
+          "result": "passed",
+          "detail": "The three cases passed for parallel checkouts, reuse of one source from two environments and separate cache files for two sources in one environment."
         }
       ]
     },
@@ -345,6 +395,16 @@
           ],
           "result": "passed",
           "detail": "All 10 checks passed, covering concurrent builds, edited dependencies, a missing image and retention without filesystem locking."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Cache image lifetime regression checks"
+          ],
+          "result": "passed",
+          "detail": "The checks passed for rebuilds and pruning while an existing session retains its loaded images."
         }
       ]
     },
@@ -395,6 +455,325 @@
           ],
           "result": "passed",
           "detail": "On x86-64 Linux, a throw with 428 stack entries took 107.8 µs with the shipped cache and 676.0 µs after restoring the 128-entry setting in the same process."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Deep-throw benchmark with the shipped and default unwind caches"
+          ],
+          "result": "passed",
+          "detail": "At 428 frames, a throw took 233.2 µs as shipped and 1490.7 µs with the original cache size restored."
+        }
+      ]
+    },
+    {
+      "id": "darwin-stream-read-size",
+      "role": "fix",
+      "title": "Large buffered stream reads can fail with EINVAL on macOS",
+      "summary": "When a pipe, socket or TTY has more than 2 GiB of receive-buffer space, Julia 1.10 can request a read larger than macOS accepts. The fork caps each native read and lets the stream continue reading the rest.",
+      "repairs": [],
+      "upstream_refs": [],
+      "draft": {
+        "title": "Large buffered stream reads can fail with EINVAL on macOS",
+        "body": "A Julia 1.10 stream on macOS can have more buffer space available than the operating system accepts in a single read. A socket or pipe with that much room can fail with EINVAL during an otherwise ordinary transfer. Limiting each request to INT_MAX preserves the connection and lets subsequent reads fill the rest of the buffer. The macOS arm64 build passed checks at and on either side of that limit.",
+        "prepared_at": "2026-11-21T11:42:00Z"
+      },
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "696470629cd69a9a5cea8eef85fb884a3c394094",
+            "title": "Cap each native stream read at INT_MAX bytes on macOS, as on Windows: macOS's read(2) fails with EINVAL above it",
+            "original": [
+              "696470629cd69a9a5cea8eef85fb884a3c394094"
+            ]
+          }
+        ],
+        "why_together": "One change limits the length offered to libuv on macOS. Linux keeps its normal read length."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "macOS arm64, 3b3f26e302fe",
+          "tests": [
+            "Native stream read-length boundary checks"
+          ],
+          "result": "passed",
+          "detail": "The macOS binary passed the read-length check on both sides of the signed 32-bit limit."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Linux stream read-length checks"
+          ],
+          "result": "passed",
+          "detail": "Linux preserved the requested read length. The macOS boundary result was measured separately on the 1.10.12 build."
+        }
+      ]
+    },
+    {
+      "id": "pkgimage-invoke-callee",
+      "role": "fix",
+      "title": "Loading a package image can attach an invoke dependency to the wrong method",
+      "summary": "Two callers can share an invoke signature while depending on different specializations. Julia 1.10 can restore both dependencies onto one callee, leaving a caller with stale code after its own callee changes.",
+      "repairs": [],
+      "upstream_refs": [],
+      "draft": {
+        "title": "Loading a package image can attach an invoke dependency to the wrong method",
+        "body": "On Julia 1.10, loading a package from its compiled image can change which method redefinition invalidates one of its callers. Two invoke sites may have the same signature object and select different callees. Both should behave as they do when loaded from source. Keeping the callee identity when deduplicating serialized dependencies restored that behavior in a two-caller comparison.",
+        "prepared_at": "2026-11-21T11:42:00Z"
+      },
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "a2736bdc9a404ad4ce76983d69093be863ef9a0b",
+            "title": "Key a package image's invoke targets by signature and callee, so callers sharing one invoke signature object keep their own callee on load",
+            "original": [
+              "a2736bdc9a404ad4ce76983d69093be863ef9a0b"
+            ]
+          }
+        ],
+        "why_together": "One change to package-image serialization distinguishes the callee as well as the signature. Rebuilding a package image records both dependencies correctly."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "Linux x86-64, 33d23865e8fb",
+          "tests": [
+            "Method invalidation after loading from source and a package image"
+          ],
+          "result": "passed",
+          "detail": "Each caller kept its expected callee, both when loaded from source and when restored from an image."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Compare invoke dependencies loaded from source and from an image"
+          ],
+          "result": "passed",
+          "detail": "Each caller retained its own callee in both modes."
+        }
+      ]
+    },
+    {
+      "id": "pidfile-watcher-lifetime",
+      "role": "fix",
+      "title": "A process that waited for a pidfile can retain a watcher after acquiring the lock",
+      "summary": "A short-lived Julia 1.10 process can wait for the polling timeout during shutdown after briefly contending for a pidfile. The backport closes the watcher when the wait finishes.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/55877",
+          "relation": "fixes"
+        }
+      ],
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "3b3f26e302fe94b55d03ff464e5d1ba7b5d3d363",
+            "title": "Backport the pidfile half of b6e013646639 to v1.10.12: watch for the lock in the waiting task and close the watcher before returning, so a process that waited for a pidfile lock does not keep a file watcher running",
+            "original": [
+              "3b3f26e302fe94b55d03ff464e5d1ba7b5d3d363"
+            ]
+          }
+        ],
+        "why_together": "The pidfile part of Julia #55877 closes the watcher and timer in the waiting task. It applies without the broader FileMonitor rewrite."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "Linux x86-64, 33d23865e8fb",
+          "tests": [
+            "Precompile worker waiting on a held pidfile"
+          ],
+          "result": "passed",
+          "detail": "The worker exited successfully in 0.9 s after waiting for a lock held for 0.5 s. The watcher check found no pending wait."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Worker acquiring a contended pidfile"
+          ],
+          "result": "passed",
+          "detail": "The worker finished with no watcher left running."
+        }
+      ]
+    },
+    {
+      "id": "opaque-closure-static-parameters",
+      "role": "fix",
+      "title": "Opaque closures can fail to capture an enclosing method’s static parameters",
+      "summary": "Julia 1.10 can terminate while constructing an opaque closure that refers to a static parameter of the surrounding method. Julia #57928 fixed the lowering on newer releases. The public 1.10 backport and the fleet commit carry the same patch.",
+      "repairs": [],
+      "upstream_refs": [
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/54236",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/issues/54357",
+          "relation": "reports"
+        },
+        {
+          "url": "https://github.com/JuliaLang/julia/pull/57928",
+          "relation": "fixes"
+        }
+      ],
+      "fix": {
+        "branch": "backport-1.10-57928",
+        "commits": [
+          {
+            "sha": "1fdf471d088520ba8cafdab7faacdf1918b969e4",
+            "title": "fix opaque_closure sparam capture (#57928)",
+            "original": [
+              "ab8defe1d0d94ee066550d8fa433d1639632a9da"
+            ]
+          }
+        ],
+        "why_together": "The single backport includes the lowering change and its regression tests. The original and the prepared commit are alternative applications of that patch."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "Linux x86-64, 33d23865e8fb",
+          "tests": [
+            "Opaque closure checks for enclosing static parameters",
+            "opaque_closure"
+          ],
+          "result": "passed",
+          "detail": "All three static-parameter checks passed on the 1.10.12 build."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Julia opaque_closure test suite"
+          ],
+          "result": "passed",
+          "detail": "The suite includes both upstream regression cases for enclosing static parameters."
+        }
+      ]
+    },
+    {
+      "id": "gc-large-heap-interval",
+      "role": "fix",
+      "title": "Julia 1.10 collects much more frequently after the live heap exceeds roughly 2.3 GiB",
+      "summary": "A Julia 1.10 process can spend more time in GC when the same allocation workload retains a slightly larger heap. The collector falls back to its small default interval once half the live size exceeds its maximum interval.",
+      "repairs": [],
+      "upstream_refs": [],
+      "draft": {
+        "title": "Julia 1.10 collects much more frequently after the live heap exceeds roughly 2.3 GiB",
+        "body": "A Julia 1.10 allocation workload becomes much more expensive to collect after the live heap passes about 2.3 GiB. Half the live size has then reached the upper limit for the next allocation interval, but the collector selects its small default instead. The expected behavior is to keep the upper limit. With that change the large-heap check needed ten collections, all incremental. A process with less headroom can also lower the interval cap.",
+        "prepared_at": "2026-11-21T11:42:00Z"
+      },
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "33d23865e8fba9ceea27e478213a30f998cceaa6",
+            "title": "Keep the collection interval at max_collect_interval once half the live heap exceeds it, instead of falling back to the default, and let JULIA_KB_GC_MAX_INTERVAL_MB set that maximum for one process",
+            "original": [
+              "33d23865e8fba9ceea27e478213a30f998cceaa6"
+            ]
+          }
+        ],
+        "why_together": "The commit clamps the interval at its maximum and allows a process to lower the cap to fit its available memory. Julia 1.11 uses different heuristics."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "Linux x86-64, 33d23865e8fb",
+          "tests": [
+            "Fixed allocation workload with different collection limits and a large live heap"
+          ],
+          "result": "passed",
+          "detail": "The large-heap case used ten collections, with no full collections. The configured cap, minimum and invalid-value checks passed."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "Collection-interval checks and Julia gc test suite"
+          ],
+          "result": "passed",
+          "detail": "The large-heap case completed with ten collections, none full. The configured cap, floor and invalid-value checks passed."
+        }
+      ]
+    },
+    {
+      "id": "aarch64-jit-unwind-tables",
+      "role": "fix",
+      "title": "JIT stack unwinding can fail on Julia 1.10 for AArch64 Linux",
+      "summary": "Julia 1.10 on AArch64 Linux uses LLVM 15 to link JIT code. Its unwind metadata can be incomplete for the platform unwinder. The fork supplies the table terminator provided by newer LLVM versions.",
+      "repairs": [],
+      "upstream_refs": [],
+      "draft": {
+        "title": "JIT stack unwinding can fail on Julia 1.10 for AArch64 Linux",
+        "body": "On AArch64 Linux with Julia 1.10 and LLVM 15, unwinding JIT-generated code can terminate the process. The ELF unwind tables should carry the terminator expected by the platform unwinder. The fork applies the convention used by newer LLVM versions and passes the native AArch64 regression check. The change is specific to that object format and architecture. [Upstream LLVM change](https://github.com/llvm/llvm-project/commit/68c14f582ce64ae6bd79e78b609fa3469af0ed83)",
+        "prepared_at": "2026-11-21T11:42:00Z"
+      },
+      "fix": {
+        "branch": "dogfood",
+        "commits": [
+          {
+            "sha": "45cc480d834c1d45ab167d0345ea9b68be83ddfb",
+            "title": "End each JIT unwind table with a zero length word on ELF/aarch64, as LLVM 16 does (D146067), so libgcc never reads past a table that ends at its page end",
+            "original": [
+              "45cc480d834c1d45ab167d0345ea9b68be83ddfb"
+            ]
+          }
+        ],
+        "why_together": "The single JITLink change applies only to ELF on AArch64 and completes each unwind table before registration. The upstream LLVM change is D146067."
+      },
+      "depends_on": [],
+      "requires": [],
+      "validation": [
+        {
+          "base": "d93beab124c850d5f600f290069853e81413f7ca",
+          "julia": "1.10.12",
+          "native_build": "Linux aarch64, 45cc480d834c",
+          "tests": [
+            "JIT unwind-table regression check on the native AArch64 build"
+          ],
+          "result": "passed",
+          "detail": "The platform-specific regression passed in the native build of the original 1.10.12 patch."
+        },
+        {
+          "base": "86ef4a7b91db76b041ced6b34b6a1ebc7f86e381",
+          "julia": "1.10.14",
+          "native_build": "Linux x86-64, 8d70bf575f98",
+          "tests": [
+            "AArch64 JIT unwind-table regression"
+          ],
+          "result": "not-run",
+          "detail": "This merged build ran on x86-64. The native AArch64 result above covers the original 1.10.12 fix."
         }
       ]
     }
